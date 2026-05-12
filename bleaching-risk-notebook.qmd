@@ -1,0 +1,361 @@
+---
+title: "Exploring Coral Bleaching Risk Using NOAA Coral Reef Watch DHW Data"
+description: |
+  A reproducible analysis of satellite-derived thermal stress metrics across five
+  reef systems, using NOAA Coral Reef Watch Degree Heating Weeks (DHW) data.
+author: "[Your Name]"
+date: today
+date-format: "MMMM D, YYYY"
+categories:
+  - Marine Science
+  - Remote Sensing
+  - Environmental Data Science
+  - Python
+  - Reproducible Research
+image: figures/site_map_peak_dhw.png
+toc: true
+toc-depth: 3
+toc-title: "On this page"
+number-sections: false
+code-fold: true
+code-summary: "Show code"
+fig-cap-location: bottom
+citation:
+  url: https://yourdomain.github.io/projects/coral-bleaching-dhw
+bibliography: references.bib
+---
+
+```{python}
+#| echo: false
+#| message: false
+import warnings
+warnings.filterwarnings("ignore")
+```
+
+## Overview
+
+When I started looking for a dataset to anchor this first marine science project,
+I had a simple question: *what data actually gets used by the people trying to
+protect coral reefs in the real world?* That question led me directly to NOAA's
+Coral Reef Watch (CRW) program and their Degree Heating Weeks (DHW) product —
+and then to the paper that describes exactly how it's built: Skirving et al.
+(2020), *CoralTemp and the Coral Reef Watch Coral Bleaching Heat Stress Product
+Suite Version 3.1* [@skirving2020].
+
+Reading that paper changed how I thought about this project.
+
+::: {.callout-note appearance="simple"}
+**Data source:** NOAA Coral Reef Watch Version 3.1 Daily 5km Satellite Coral
+Bleaching Heat Stress Product Suite. Updated daily.
+[coralreefwatch.noaa.gov](https://coralreefwatch.noaa.gov/)
+:::
+
+### Why not just use raw sea surface temperature?
+
+My first instinct was to pull raw SST data — it's widely available from multiple
+sources including NOAA OISST, NASA MODIS, and the Copernicus Marine Service. But
+raw SST alone doesn't tell you whether a coral is stressed. A reading of 29°C
+means something very different on the Great Barrier Reef versus Bonaire. What
+matters isn't the absolute temperature — it's how that temperature compares to
+what the corals at that location have adapted to over their lifetimes.
+
+That realization pushed me toward NOAA CRW's derived product suite, where that
+comparison is already built in — and rigorously validated against decades of field
+bleaching observations worldwide.
+
+### The climatological baseline — and why it matters so much
+
+The entire CRW product suite rests on a climatological baseline: a set of
+long-term average SST values for every location on Earth, for every month of the
+year. This is not a trivial thing to build correctly. As Skirving et al. (2020)
+describe, CRW spent years grappling with a fundamental problem — the satellite SST
+data used to *build* the climatology came from different sensors and processing
+pipelines than the near-real-time data used to *calculate* the anomalies. That
+mismatch introduced systematic biases, particularly at the high temperatures most
+relevant to bleaching.
+
+The development of **CoralTemp** — a single, continuous daily SST record spanning
+1985 to the present, built by carefully blending three different satellite products
+— was specifically designed to solve this problem. For the first time, CRW could
+compute the climatology and the daily anomalies from the *same* underlying dataset.
+The Monthly Mean (MM) climatology was derived from this record across 1985–2012,
+and the **Maximum Monthly Mean (MMM)** — the warmest month at each location —
+became the critical threshold from which the HotSpot and DHW products are derived.
+
+I want to be transparent about why this matters for this project: I am not
+independently validating the baseline. I am trusting that NOAA CRW's 25-year
+investment in getting this right is sound — which is supported by the peer-reviewed
+literature and by the fact that these products are the global standard used by reef
+managers worldwide. But understanding *that the baseline exists, how it was
+constructed, and what its assumptions are* is essential context for interpreting
+everything downstream. The DHW values we analyze are only as meaningful as the MMM
+they're derived from.
+
+### The 5km pixel limitation
+
+One more thing worth acknowledging upfront: the Virtual Station data used in this
+analysis represents a single 5×5 km satellite pixel per reef location. Real reef
+systems are far more heterogeneous than that. Temperatures vary with depth, local
+current patterns, reef orientation, and bathymetry — a coral colony in a deep
+channel experiences very different conditions than one on a shallow exposed crest,
+even within the same reef system.
+
+This means the DHW values we analyze are best understood as a **reef-wide surface
+thermal stress index** — a strong and validated predictor of bleaching risk at the
+population level, but not a precise measurement of conditions at any specific
+location. This is the same limitation the entire global reef monitoring community
+works with, and it doesn't undermine the analysis. It just means we should be
+careful about over-interpreting site-level differences that might reflect local
+thermal refugia or exposure patterns rather than true differences in bleaching
+pressure.
+
+With those caveats clearly on the table, here is what this project actually does.
+
+---
+
+## Study Sites
+
+Five reef systems spanning two ocean basins were selected to compare thermal
+stress patterns across different geographic and ecological contexts:
+
+| Site | Region | Latitude | Longitude |
+|------|--------|----------|-----------|
+| Florida Keys, USA | Caribbean/Atlantic | 24.55°N | 81.50°W |
+| Grand Cayman | Caribbean | 19.30°N | 81.38°W |
+| Roatán, Honduras | Caribbean (Mesoamerican Reef) | 16.32°N | 86.55°W |
+| Bonaire | Southern Caribbean | 12.15°N | 68.28°W |
+| Great Barrier Reef (Cairns sector) | Indo-Pacific | 16.92°S | 145.77°E |
+
+These sites were chosen to represent:
+
+- **High-profile, well-documented bleaching events** (Florida Keys 2023, GBR 2016/2022)
+- **The Mesoamerican Reef system**, the second-largest barrier reef in the world
+- **Contrasting bleaching histories** (Bonaire is known for relatively robust reef health)
+- **Inter-basin comparison** (Caribbean vs. Indo-Pacific thermal dynamics)
+
+![Study site locations, colored by peak DHW over the most recent 5 years.
+Larger, darker markers indicate higher accumulated thermal stress.](figures/site_map_peak_dhw.png){#fig-map}
+
+---
+
+## Science Background
+
+### Sea Surface Temperature Anomaly
+
+Every ocean location has a long-term average temperature for each time of year,
+derived from decades of satellite records. The **SST anomaly** measures the
+departure of today's temperature from that historical average:
+
+$$\text{SST Anomaly} = \text{SST} - \text{Daily SST Climatology}$$
+
+A positive anomaly means the ocean is warmer than usual for that season. This
+metric provides broad context for ocean warming but is not on its own a reliable
+predictor of coral bleaching, because corals in different locations are adapted to
+different baseline temperatures.
+
+### Coral Bleaching HotSpot
+
+The **HotSpot** product is calibrated specifically to coral biology. It measures
+how far the current temperature exceeds the *warmest month* that corals at that
+location have historically experienced — a threshold called the Maximum Monthly
+Mean (MMM):
+
+$$\text{HotSpot} = \text{SST} - \text{MMM SST Climatology}, \quad \text{HotSpot} \geq 0$$
+
+A HotSpot ≥ 1°C indicates active thermal stress. The MMM baseline varies by
+location, so this metric captures *relative* stress rather than absolute
+temperature — making it comparable across sites with very different ambient ocean
+temperatures [@skirving2020].
+
+### Degree Heating Weeks (DHW)
+
+A single warm day can stress corals, but corals are resilient to brief exposures.
+What causes bleaching is *sustained* thermal stress accumulating over weeks.
+**Degree Heating Weeks** integrate the HotSpot values (when ≥ 1°C) over a moving
+12-week window:
+
+$$\text{DHW} = \frac{\sum_{d=0}^{83} \max(\text{HotSpot}_d - 0, 0) \cdot \mathbf{1}[\text{HotSpot}_d \geq 1]}{7}$$
+
+Units are **°C-weeks**. Think of DHW as a "heat debt" that builds up as hot
+conditions persist — analogous to the accumulated dose concept in clinical
+pharmacology or radiation biology.
+
+Two key thresholds, established through satellite monitoring and field validation
+[@liu2013]:
+
+| DHW Value | Alert Level | Biological Expectation |
+|-----------|-------------|----------------------|
+| < 4 °C-weeks | Watch / Warning | Thermal stress present; monitoring needed |
+| ≥ 4 °C-weeks | **Alert Level 1** | Bleaching likely |
+| ≥ 8 °C-weeks | **Alert Level 2** | Severe bleaching; significant mortality likely |
+
+---
+
+## Data & Methods
+
+### Data Acquisition
+
+Data were fetched programmatically from the NOAA CRW Virtual Station feed, which
+provides pre-extracted point time series for named reef stations. This approach
+delivers the same underlying 5km CoralTemp satellite product without requiring
+manual processing of global NetCDF raster files — making the analysis lightweight,
+reproducible, and easily updated.
+
+```python
+CRW_BASE_URL = "https://coralreefwatch.noaa.gov/vs/data/{station_id}.csv"
+```
+
+Each station CSV includes daily or twice-weekly records of SST, SST Anomaly,
+HotSpot, DHW, and Bleaching Alert Level (0–4). Data were cached locally after
+first retrieval to support reproducibility in offline contexts.
+
+### Analysis Pipeline
+
+1. **Fetch** — live HTTP request to CRW Virtual Station API per site  
+2. **Cache** — store raw CSVs in `data/raw/` (regenerated on `force_refresh=True`)  
+3. **Explore** — inspect date ranges, missing values, summary statistics  
+4. **Visualize** — DHW time series, alert level distributions, annual peak heatmap  
+5. **Map** — site locations colored by recent peak DHW  
+
+Full reproducible code is available in
+[`coral_bleaching_dhw_analysis.ipynb`](https://github.com/yourusername/coral-bleaching-dhw/blob/main/coral_bleaching_dhw_analysis.ipynb).
+
+---
+
+## Results
+
+### DHW Time Series
+
+The figure below shows Degree Heating Week time series for all five reef sites
+since 2010. Horizontal dashed lines mark the Alert Level 1 (4 °C-weeks) and
+Alert Level 2 (8 °C-weeks) thresholds.
+
+![DHW time series for all five reef sites (2010–present). Dashed orange line:
+Alert Level 1 (bleaching likely). Dashed red line: Alert Level 2 (mortality likely).
+Data: NOAA CRW Version 3.1.](figures/dhw_timeseries_all_sites.png){#fig-timeseries}
+
+Key observations:
+
+- **Florida Keys** shows dramatically elevated DHW values in 2023, consistent
+  with the record-breaking marine heat wave that drove mass bleaching across the
+  region.
+- **Great Barrier Reef** shows repeated exceedance of the Alert Level 2 threshold,
+  particularly in 2016 and 2022, corresponding to well-documented mass bleaching
+  events.
+- **Bonaire** generally shows lower DHW values than the other Caribbean sites,
+  consistent with its relatively deep thermocline and upwelling influence.
+
+### Bleaching Alert Level Distribution
+
+The chart below shows the percentage of observation days each site spent at
+each Bleaching Alert Level across the full data record.
+
+![Distribution of NOAA CRW Bleaching Alert Levels across the full observation
+period for each site. Colors follow the CRW standard palette.
+](figures/alert_level_comparison.png){#fig-alerts}
+
+### Annual Peak DHW Heatmap
+
+The heatmap below summarizes peak annual DHW by site and year, allowing direct
+visual comparison of bleaching risk across time.
+
+![Annual peak DHW by reef site and year. Values ≥ 4 indicate bleaching-level
+thermal stress; values ≥ 8 indicate risk of significant coral mortality.
+Data: NOAA CRW Version 3.1.](figures/annual_peak_dhw_heatmap.png){#fig-heatmap}
+
+Notable patterns:
+
+- **2016** stands out as a global stress year, with elevated DHW at both the GBR
+  and Caribbean sites.
+- **2023–2024** saw the most extreme values at the Florida Keys, reflecting the
+  fourth global mass bleaching event (officially confirmed by NOAA and ICRS).
+- Year-to-year variability is high, driven partly by ENSO cycles — El Niño years
+  tend to drive elevated SSTs across the tropics.
+
+---
+
+## Interpretation & Limitations
+
+### What this analysis shows
+
+This analysis demonstrates the utility of satellite thermal monitoring for
+tracking bleaching risk across geographically distributed reef systems. The DHW
+metric — developed and validated by NOAA CRW scientists over more than 20 years —
+provides a biologically grounded, globally consistent index of accumulated thermal
+stress that has been correlated with field observations of bleaching onset and
+severity.
+
+### Limitations to note
+
+- **Point data:** CRW Virtual Station data represent a single 5×5 km pixel per
+  site. Actual reef conditions vary at finer spatial scales due to bathymetry,
+  currents, and local upwelling.
+- **No in situ validation:** This analysis does not include field bleaching surveys
+  or coral cover data. DHW is a *risk indicator*, not a direct measurement of
+  bleaching.
+- **Alert thresholds are global:** The 4 and 8 °C-week thresholds are population-
+  level averages. Some coral communities (e.g., those in warmer back-reef
+  environments) may have higher thermal tolerance, while others may bleach at
+  lower DHW values.
+
+---
+
+## Future Directions
+
+This MVP analysis establishes the data pipeline and visualization framework.
+Planned extensions include:
+
+- **Spatial raster analysis** — process global CRW NetCDF files via ERDDAP to
+  produce regional DHW maps
+- **Bleaching observation integration** — overlay NOAA CoRIS or Reef Check field
+  survey data to validate satellite signals
+- **ENSO correlation** — correlate DHW peaks with Niño 3.4 SST anomaly index
+- **Trend analysis** — fit linear or Bayesian trend models to annual peak DHW to
+  quantify warming trajectories at each site
+
+---
+
+## Technical Details
+
+| Item | Detail |
+|------|--------|
+| Language | Python 3.11 |
+| Key packages | `pandas`, `numpy`, `matplotlib`, `seaborn`, `requests`, `cartopy`, `folium` |
+| Data format | CSV (CRW Virtual Station) |
+| Notebook | Jupyter (`.ipynb`) |
+| Portfolio framework | Quarto |
+| Version control | Git / GitHub |
+
+---
+
+## References
+
+::: {#refs}
+:::
+
+**Data citation:**
+
+> NOAA Coral Reef Watch (CRW). 2000, updated daily. *NOAA Coral Reef Watch
+> Version 3.1 Daily 5km Satellite Coral Bleaching Heat Stress Monitoring
+> Product Suite; CoralTemp and Coral Bleaching Heat Stress.* College Park,
+> Maryland, USA: NOAA/NESDIS. Accessed [DATE] at
+> https://coralreefwatch.noaa.gov/
+
+---
+
+## About This Project
+
+This project is part of a portfolio in marine environmental data science,
+developed to demonstrate reproducible analysis workflows applied to real-world
+reef conservation data. The full code, data pipeline, and environment
+specification are available on GitHub.
+
+::: {.callout-tip}
+## Reproducibility
+Clone the repository and run `jupyter notebook coral_bleaching_dhw_analysis.ipynb`
+to reproduce all figures. Data is fetched live from NOAA CRW on first run and
+cached locally. See `README.md` for environment setup instructions.
+:::
+
+[View on GitHub](https://github.com/yourusername/coral-bleaching-dhw){.btn .btn-outline-primary}
+[NOAA Coral Reef Watch](https://coralreefwatch.noaa.gov/){.btn .btn-outline-secondary}
