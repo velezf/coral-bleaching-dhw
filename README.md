@@ -2,7 +2,7 @@
 
 A reproducible Python/Jupyter analysis of satellite-derived coral thermal stress metrics across five reef systems, using live NOAA Coral Reef Watch (CRW) Degree Heating Weeks (DHW) data.
 
-**Portfolio project page:** [yourdomain.github.io/projects/coral-bleaching-dhw](https://yourdomain.github.io/projects/coral-bleaching-dhw)
+**Portfolio project page:** [velezf.github.io/projects/coral-bleaching-dh](https://velezf.github.io/projects/coral-bleaching-dhw)
 
 ---
 
