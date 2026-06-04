@@ -33,6 +33,8 @@ Data are fetched live via the CRW Virtual Station feed (space-delimited `.txt` f
 
 ## Quickstart
 
+**Prerequisites:** [uv](https://docs.astral.sh/uv/) and Python 3.11.
+
 ### 1. Clone the repo
 
 ```bash
@@ -43,18 +45,16 @@ cd coral-bleaching-dhw
 ### 2. Set up the environment
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+uv sync
 ```
 
 ### 3. Run the notebook
 
 ```bash
-jupyter notebook coral_bleaching_dhw_analysis.ipynb
+uv run jupyter notebook coral_bleaching_dhw_analysis.ipynb
 ```
 
-On first run, the notebook fetches live data from NOAA CRW and caches the raw `.txt` files to `data/raw/`. Subsequent runs use the cache. To force a fresh download: set `force_refresh=True` in the Data Acquisition section.
+On first run, the notebook fetches live data from NOAA CRW and caches the raw `.txt` files to `data/raw/`. Subsequent runs use the cache. To force a fresh download: set `force_refresh=True` in the fetch call.
 
 ### 4. View the Quarto portfolio page (optional)
 
@@ -69,7 +69,9 @@ coral-bleaching-dhw/
 ├── README.md
 ├── coral_bleaching_dhw_analysis.ipynb   # Main analysis notebook
 ├── references.bib                       # BibTeX citations
-├── requirements.txt
+├── pyproject.toml                       # uv project config and dependencies
+├── uv.lock                              # Pinned dependency lock file
+├── .python-version                      # Python 3.11 pin
 ├── LICENSE
 ├── .gitignore
 │

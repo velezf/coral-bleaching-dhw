@@ -1,0 +1,15 @@
+[project]
+name = "coral-bleaching-dhw"
+version = "0.1.0"
+description = "Analysis environment and notebook for the coral bleaching risk / NOAA CRW DHW page at velezf.github.io"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "ipykernel>=7.2.0",
+    "jupyter>=1.1.1",
+    "matplotlib>=3.10.9",
+    "nbformat>=5.10.4",
+    "numpy>=2.4.6",
+    "pandas>=3.0.3",
+    "requests>=2.34.2",
+]
